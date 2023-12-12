@@ -1,0 +1,40 @@
+GET http://localhost:3001/resource
+Authorization: Bearer 
+
+###
+
+POST http://localhost:3001/token
+Content-Type: application/json
+
+{
+    "token": ""
+}
+
+###
+
+POST http://localhost:3001/login
+Content-Type: application/json
+
+{
+    "username": "testusername",
+    "password": "testpassword"
+}
+
+###
+
+DELETE http://localhost:3001/logout
+Content-Type: application/json
+
+{
+    "token": ""
+}
+
+###
+
+POST http://localhost:3001/signup
+Content-Type: application/json
+
+{
+    "username": "testusername",
+    "password": "testpassword"
+}
