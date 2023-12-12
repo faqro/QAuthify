@@ -18,6 +18,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  usernameLow: {
+    type: String,
+    required: true
+  },
   hashId: { //never modify this property as good practice
     type: String,
     required: false

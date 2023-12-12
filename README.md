@@ -11,8 +11,9 @@ To do:
 - [X] Basic setup
 - [X] Refresh token setup (login, auth verify for resource access, logout) (MongoDB should store userID, list of refresh tokens & date of last usage & location of last usage & ip of last usage, )
 - [X] Fully implement MongoDB (including SSL)
-- [ ] Delete account feature
-- [ ] Refresh token expiration
+- [X] Delete account feature
+- [X] Refresh token expiration (optional)
 - [X] Credential validation (username, password) with MongoDB
 - [ ] Cross-domain SSO (access cookies/localstorage from subdomain setup?)
-- [ ] SSL/HTTPS (serve SSL from Express)
+- [X] SSL/HTTPS (serve SSL from Express)
+- [X] Prevent ID overlap

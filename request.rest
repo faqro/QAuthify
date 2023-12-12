@@ -1,5 +1,10 @@
+GET http://localhost:3001/accountinfo
+Authorization: Bearer TOKENHERE
+
+###
+
 GET http://localhost:3001/resource
-Authorization: Bearer 
+Authorization: Bearer TOKENHERE
 
 ###
 
@@ -16,8 +21,8 @@ POST http://localhost:3001/login
 Content-Type: application/json
 
 {
-    "username": "testusername",
-    "password": "testpassword"
+    "username": "user",
+    "password": "password"
 }
 
 ###
@@ -35,6 +40,15 @@ POST http://localhost:3001/signup
 Content-Type: application/json
 
 {
-    "username": "testusername",
-    "password": "testpassword"
+    "username": "user",
+    "password": "password"
+}
+
+###
+
+DELETE http://localhost:3001/delacc
+Content-Type: application/json
+
+{
+    "token": ""
 }

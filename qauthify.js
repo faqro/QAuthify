@@ -10,17 +10,19 @@ const express = require('express')
 const app = express()
 const Usertype = require('./models/usertype')
 const shajs = require('sha.js')
+const https = require('https')
 
 const jwt = require('jsonwebtoken')
 
-//app.use(express.static('dist')) //comment out if deployed seperately from frontend
 app.use(express.json())
 
-const KEY_LIFETIME_SEC = 900
+const TOKEN_LIFETIME_SEC = 900 //how long the connection should last before the client must request a new access token
+//const privateKey = fs.readFileSync('./ssl/privatekey.pem', 'utf8')
+//const certificate = fs.readFileSync('./ssl/certificate.pem', 'utf8')
 
 const resource = [
     {
-        userIdOwner: 'exampleuseridhere1',
+        userIdOwner: 'faraazJan',
         content: '(1) My content here'
     },
     {
@@ -52,12 +54,35 @@ const getTokenInfo = (req, res, next) => {
     next()
 }
 
+const checkuserexists = (req, res, next) => {
+    Usertype.findOne({ usernameLow: req.body.username.toLowerCase() })
+        .then((existUser) => {
+            if(existUser) return res.sendStatus(409)
+            next()
+        }).catch(() => {
+            next()
+        })
+}
+
 const generateAccessToken = (user) => {
-    return jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: `${KEY_LIFETIME_SEC}s` })
+    return jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: `${TOKEN_LIFETIME_SEC}s` })
 }
 
 app.get('/resource', authenticateToken, (req, res) => { //can be migrated to a seperate content server in order to seperate login/content traffic
     res.json(resource.filter(item => item.userIdOwner === req.user.userId)) //only serve content the user is allowed to view.
+})
+
+app.get('/accountinfo', authenticateToken, (req, res) => { //can be migrated to a seperate content server in order to seperate login/content traffic
+
+    Usertype.findById(req.user.userId)
+        .then(userdata => {
+            const accountInfo = {
+                username: userdata.username
+            }
+            res.json(accountInfo)
+        }).catch(error => {
+            res.sendStatus(404)
+        })
 })
 
 app.delete('/logout', getTokenInfo, (req, res) => {
@@ -68,13 +93,12 @@ app.delete('/logout', getTokenInfo, (req, res) => {
             userData.save()
                 .then(() => {
                     res.sendStatus(204)
+                    console.log(`logout by user ${userData.username}`)
                 }).catch(error => {
-                    console.log(error)
                     res.sendStatus(500)
                 })
         })
         .catch(error => {
-            console.log(error)
             res.sendStatus(403)
         })
 })
@@ -85,9 +109,7 @@ app.post('/login', (req, res) => {
     Usertype.findOne({ username: body.username })
         .then(usertype => {
 
-            console.log(usertype)
-
-            const userValidate = {userId: usertype._id.toString()}
+            const userValidate = {userId: usertype._id.toString()} //optionally specify an expiration
             const accessToken = generateAccessToken(userValidate)
             const refreshToken = jwt.sign(userValidate, process.env.REFRESH_TOKEN_SECRET)
 
@@ -105,6 +127,7 @@ app.post('/login', (req, res) => {
                     lastIp: req.socket.remoteAddress,
                 }
             }}).then(updatedUsertype => {
+                console.log(`new login to user ${updatedUsertype.username}`)
                 res.json({
                     accessToken: accessToken,
                     refreshToken: refreshToken
@@ -114,22 +137,22 @@ app.post('/login', (req, res) => {
             })
         })
         .catch(error => {
-            console.log(error)
             res.sendStatus(403)
         })
 })
 
-app.post('/signup', (req, res) => {
+app.post('/signup', checkuserexists, (req, res) => {
     const body = req.body
 
     if(!(body.username && body.password)) return response.sendStatus(404)
 
     const newuser = new Usertype({
-        username: body.username
+        username: body.username,
+        usernameLow: body.username.toLowerCase()
     })
     newuser.hashPassword = shajs('sha256').update(`${body.password}${newuser._id.toString()}`).digest('hex')
 
-    const identifier = {userId: newuser._id.toString()}
+    const identifier = {userId: newuser._id.toString()} //optionally specify an expiration
     const accessToken = generateAccessToken(identifier)
     const refreshToken = jwt.sign(identifier, process.env.REFRESH_TOKEN_SECRET)
     newuser.refreshTokens = [{
@@ -140,6 +163,7 @@ app.post('/signup', (req, res) => {
         }]
 
     newuser.save().then(savedUser => {
+        console.log(`new user created ${body.username}`)
         res.json({
             accessToken: accessToken,
             refreshToken: refreshToken
@@ -147,6 +171,29 @@ app.post('/signup', (req, res) => {
     }).catch(error => {
         console.log(error)
         res.sendStatus(400)
+    })
+})
+
+app.delete('/delacc', getTokenInfo, (req, res) => {
+    const refreshToken = req.body.token
+    if(refreshToken === null) return res.sendStatus(401)
+
+    Usertype.findById(req.tokeninfo.userId)
+    .then(userData => {
+        if(!userData.refreshTokens.map(refreshTokenItem => refreshTokenItem.token).includes(refreshToken)) return res.sendStatus(403)
+        
+        jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
+            if(err) return res.sendStatus(403)
+            Usertype.findByIdAndDelete(req.tokeninfo.userId)
+                .then(() => {
+                    res.sendStatus(204)
+                    console.log(`deleted account ${userData.username}`)
+                }).catch(() => {
+                    res.sendStatus(404)
+                })
+        })
+    }).catch(error => {
+        res.sendStatus(404)
     })
 })
 
@@ -160,11 +207,24 @@ app.post('/token', getTokenInfo, (req, res) => {
         
         jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
             if(err) return res.sendStatus(403)
-            const accessToken = generateAccessToken({userId: user.userId})
-            res.json({ accessToken: accessToken })
+            
+            userData.refreshTokens = userData.refreshTokens.map(refreshTokenItem => (refreshTokenItem.token===refreshToken ? {
+                token: refreshTokenItem.token,
+                creationDate: refreshTokenItem.creationDate,
+                lastUsageDate: Date.now(),
+                lastIp: req.socket.remoteAddress
+            } : refreshTokenItem))
+            
+            userData.save()
+                .then(() => {
+                    const accessToken = generateAccessToken({userId: user.userId}) //optionally add expiration
+                    console.log(`new token generated for ${userData.username}`)
+                    res.json({ accessToken: accessToken })
+                }).catch(error => {
+                    res.sendStatus(500)
+                })
         })
     }).catch(error => {
-        console.log(error)
         res.sendStatus(404)
     })
 })
@@ -173,3 +233,10 @@ const PORT = process.env.PORT
 app.listen(PORT, () => {
   console.log(`QAuthify server running on port ${PORT}`)
 })
+
+/*https.createServer({
+    key: privateKey,
+    cert: certificate
+}, app).listen(PORT, () => {
+    console.log(`QAuthify server running on port ${PORT}`)
+})*/
