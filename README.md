@@ -1,4 +1,5 @@
 <img src="https://raw.githubusercontent.com/faqro/qauthify/master/src/qauthify-logo.png" height="100"/>
+
 # QAuthify
  
 Lightweight and open-source JWT-based SSO auth platform. Made with Node.js, Express, and MongoDB.
